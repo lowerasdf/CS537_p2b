@@ -6,6 +6,7 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "pstat.h"
 
 struct {
   struct spinlock lock;
@@ -88,6 +89,8 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->ticket = 1;
+  p->tick = 0;
 
   release(&ptable.lock);
 
@@ -199,6 +202,7 @@ fork(void)
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
+  np->ticket = curproc->ticket;
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
@@ -246,6 +250,8 @@ exit(void)
   iput(curproc->cwd);
   end_op();
   curproc->cwd = 0;
+  curproc->ticket = 0;
+  curproc->tick = 0;
 
   acquire(&ptable.lock);
 
@@ -332,23 +338,46 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
+    for(p = ptable.proc; p < &ptable.proc[NPROC];p++){
+      if(p->state != RUNNABLE) {
         continue;
+      }
+      
+      for(;;) {
+        // if (p->pid == 4) {
+        //   cprintf("A\n");
+        // } else if(p->pid == 5) {
+        //   cprintf("   B\n");
+        // } else if(p->pid == 6) {
+        //   cprintf("      C\n");
+        // }
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
+        // cprintf("pid:%d, ticket:%d\n", p->pid, p->ticket);
+        // Switch to chosen process.  It is the process's job
+        // to release ptable.lock and then reacquire it
+        // before jumping back to us.
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
 
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
+        p->tick = p->tick + 1;
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
+        // cprintf("RUNNING PID=%d, ticket=%d, tick=%d\n", p->pid, p->ticket, p->tick);
+
+        swtch(&(c->scheduler), p->context);
+
+        switchkvm();
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+
+        // cprintf("MODULO a:%d and b:%d = %d\n", p->tick, p->ticket, p->tick % p->ticket);
+        if ((p->ticket != 0 && p->tick % p->ticket == 0) || p->state != RUNNABLE) {
+          break;
+        }
+      }
+    
     }
     release(&ptable.lock);
 
@@ -530,5 +559,23 @@ procdump(void)
         cprintf(" %p", pc[i]);
     }
     cprintf("\n");
+  }
+}
+
+void proclist(struct pstat *plist) {
+  struct proc *p;
+  int i = 0;
+
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){    
+    if(p->state == UNUSED) {
+      continue;
+    }
+
+    plist->inuse[i] = 1;
+    plist->tickets[i] = p->ticket;
+    plist->pid[i] = p->pid;
+    plist->ticks[i] = p->tick;
+
+    i += 1;
   }
 }

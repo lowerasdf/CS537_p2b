@@ -182,8 +182,6 @@ UPROGS=\
 	_wc\
 	_zombie\
 	_fault\
-	_test12\
-	_test13\
 	_graph\
 
 fs.img: mkfs README $(UPROGS)

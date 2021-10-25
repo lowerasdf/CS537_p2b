@@ -344,14 +344,6 @@ scheduler(void)
       }
       
       for(;;) {
-        // if (p->pid == 4) {
-        //   cprintf("A\n");
-        // } else if(p->pid == 5) {
-        //   cprintf("   B\n");
-        // } else if(p->pid == 6) {
-        //   cprintf("      C\n");
-        // }
-
         // cprintf("pid:%d, ticket:%d\n", p->pid, p->ticket);
         // Switch to chosen process.  It is the process's job
         // to release ptable.lock and then reacquire it
@@ -359,10 +351,7 @@ scheduler(void)
         c->proc = p;
         switchuvm(p);
         p->state = RUNNING;
-
         p->tick = p->tick + 1;
-
-        // cprintf("RUNNING PID=%d, ticket=%d, tick=%d\n", p->pid, p->ticket, p->tick);
 
         swtch(&(c->scheduler), p->context);
 
@@ -372,7 +361,6 @@ scheduler(void)
         // It should have changed its p->state before coming back.
         c->proc = 0;
 
-        // cprintf("MODULO a:%d and b:%d = %d\n", p->tick, p->ticket, p->tick % p->ticket);
         if ((p->ticket != 0 && p->tick % p->ticket == 0) || p->state != RUNNABLE) {
           break;
         }
